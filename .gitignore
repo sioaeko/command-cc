@@ -1,0 +1,9 @@
+node_modules/
+*.tgz
+.commandcode/
+.claude/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db

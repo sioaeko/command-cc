@@ -1,0 +1,343 @@
+# command-cc
+
+[![Node.js >=20](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org/)
+[![Claude Code gateway](https://img.shields.io/badge/Claude%20Code-local%20gateway-111827)](#how-it-works)
+[![Command Code](https://img.shields.io/badge/Command%20Code-app%20API-2563eb)](https://commandcode.ai/)
+[![Windows tested](https://img.shields.io/badge/Windows-tested-0078d4)](#development)
+
+Run your own Claude Code installation from any folder while routing model calls through your logged-in Command Code account.
+
+![command-cc model picker inside Claude Code](assets/command-cc.png)
+
+## Important Scope
+
+`command-cc` does not bundle, redistribute, include, fork, patch, or modify Claude Code. It is only a local wrapper and gateway that launches the Claude Code CLI already installed on your machine.
+
+The wrapper exists to let a logged-in Command Code Go plan use Command Code models from inside Claude Code. It is not an official Anthropic, Claude Code, or Command Code distribution, and it is not affiliated with or endorsed by those services.
+
+```text
+Claude Code
+    -> local Anthropic-compatible gateway
+        -> Command Code model discovery
+        -> Command Code app generation API
+```
+
+`command-cc` is a global CLI wrapper. Install it once, then run it inside any repository just like `claude`.
+
+## Quick Start
+
+```powershell
+npm install -g .
+command-cc login
+command-cc doctor
+command-cc
+```
+
+Inside Claude Code:
+
+```text
+/model
+```
+
+For a one-shot prompt:
+
+```powershell
+command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
+```
+
+## What You Get
+
+| Feature | What it does |
+| --- | --- |
+| Global launcher | Run `command-cc` from any project, using your existing Claude Code install. |
+| Command Code login reuse | Reads the official Command Code login from `~/.commandcode/auth.json`. |
+| Local gateway | Presents an Anthropic-compatible API to Claude Code on `127.0.0.1`. |
+| Go-plan filtering | Shows the Go-friendly Command Code models when the logged-in account is on Go. |
+| Model aliases | Maps clean ids like `mimo-v2.5-pro` back to real ids like `xiaomi/mimo-v2.5-pro`. |
+| Usage checks | `command-cc usage` prints credits, token usage, request counts, and per-model usage. |
+| Dry-run mode | `--dry-run` shows the exact Claude Code command/env without spending generation tokens. |
+| Stale model cleanup | Removes old wrapper model defaults like `claude-mimo-v2.5-pro` from Claude Code settings before launch. |
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `command-cc` | Launch Claude Code through the local Command Code gateway. |
+| `command-cc login` | Run the official Command Code CLI login and reuse that auth. |
+| `command-cc status` | Delegate to the Command Code CLI status command. |
+| `command-cc whoami` | Delegate to the Command Code CLI identity command. |
+| `command-cc logout` | Delegate to the Command Code CLI logout command. |
+| `command-cc models` | List available Command Code models and gateway picker ids. |
+| `command-cc models --json` | Print the model list as JSON for scripts/debugging. |
+| `command-cc usage` | Show Command Code credits and usage. |
+| `command-cc usage --json` | Print raw usage/account/credit payloads as JSON. |
+| `command-cc doctor` | Check Claude Code, auth, plan detection, model discovery, and selected model. |
+| `command-cc env` | Print Anthropic env vars for manual gateway wiring. |
+| `command-cc serve` | Start only the local gateway. |
+| `command-cc config get` | Show saved wrapper config. |
+| `command-cc config path` | Print the config path. |
+
+Installed aliases:
+
+```powershell
+command-cc
+command-claudecode
+claude-command-code
+cmdclaude
+ccclaude
+```
+
+## Installation
+
+Install from GitHub:
+
+```powershell
+npm install -g github:sioaeko/command-cc
+```
+
+Local development install:
+
+```powershell
+npm install -g .
+```
+
+Symlink while iterating:
+
+```powershell
+npm link
+```
+
+Install Command Code itself if login delegation cannot find it:
+
+```powershell
+npm i -g command-code@latest
+```
+
+## Authentication
+
+The recommended flow is:
+
+```powershell
+command-cc login
+```
+
+That delegates to the official Command Code CLI (`cmdc login` on Windows, or `cmd login` where available). The wrapper then reads:
+
+```text
+~/.commandcode/auth.json
+```
+
+You usually do not need to paste an API key into this wrapper.
+
+Auth/config priority:
+
+| Source | Priority |
+| --- | --- |
+| `--api-key` | Highest |
+| `$COMMAND_CODE_API_KEY` or custom `--api-key-env` | High |
+| `$CMD_API_KEY` | High |
+| Command Code login file | Recommended default |
+| Wrapper config API key | Fallback |
+
+Optional wrapper config lives at:
+
+```text
+~/.command-claudecode/config.json
+```
+
+## Configuration
+
+Save a default model:
+
+```powershell
+command-cc config set model "xiaomi/mimo-v2.5-pro"
+```
+
+Persist picker behavior:
+
+```powershell
+command-cc config set clean-model-name false
+command-cc config set filter-models-by-plan true
+command-cc config set restrict-model-picker true
+```
+
+Show or clear config:
+
+```powershell
+command-cc config get
+command-cc config unset model
+```
+
+Environment variables still override saved preferences:
+
+```powershell
+$env:COMMAND_CODE_MODEL = "xiaomi/mimo-v2.5-pro"
+$env:COMMAND_CODE_API_KEY = "<command-code-api-key>"
+```
+
+## Model Picker Modes
+
+Claude Code has one `Default` row plus five custom model slots. To keep all six Go-plan models visible, this wrapper points `Default` at the selected model and fills the five custom slots with the remaining Go-plan models.
+
+| Mode | Command | `/model` behavior | Best for |
+| --- | --- | --- | --- |
+| Default | `command-cc` | Shows the Go-plan models as clean aliases like `mimo-v2.5-pro`, `deepseek-v4-pro`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
+| Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
+| Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
+| Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |
+
+Default Go-plan picker aliases currently look like:
+
+| Real Command Code id | Claude Code visible alias |
+| --- | --- |
+| `deepseek/deepseek-v4-pro` | `deepseek-v4-pro` |
+| `nvidia/nemotron-3-ultra-550b-a55b` | `nemotron-3-ultra-550b-a55b` |
+| `Qwen/Qwen3.7-Max` | `qwen3.7-max` |
+| `MiniMaxAI/MiniMax-M3` | `mini-max-m3` |
+| `xiaomi/mimo-v2.5-pro` | `mimo-v2.5-pro` |
+| `xiaomi/mimo-v2.5` | `mimo-v2.5` |
+
+When Claude Code sends `mimo-v2.5-pro`, the gateway forwards `xiaomi/mimo-v2.5-pro` to Command Code.
+
+## Go Plan Behavior
+
+When the logged-in account is detected as a Go plan, the picker is filtered to the Go-friendly models known to this wrapper:
+
+```text
+deepseek/deepseek-v4-pro
+nvidia/nemotron-3-ultra-550b-a55b
+Qwen/Qwen3.7-Max
+MiniMaxAI/MiniMax-M3
+xiaomi/mimo-v2.5-pro
+xiaomi/mimo-v2.5
+```
+
+Check what the wrapper sees:
+
+```powershell
+command-cc models
+command-cc models --json
+```
+
+Bypass the filter:
+
+```powershell
+command-cc --all-models
+command-cc models --all-models
+```
+
+Force it back on, even if config disables it:
+
+```powershell
+command-cc --plan-filter
+```
+
+## Usage And Credits
+
+Check credits without starting Claude Code:
+
+```powershell
+command-cc usage
+```
+
+Example shape:
+
+```text
+Command Code usage
+account: your-name
+plan: individual-go (active)
+period: 2026-06-15 -> 2026-07-15
+credits: monthly 9.8689, purchased 0, free 0
+usage: 0.1311 credits, 299,547 tokens, 27 requests
+models:
+  xiaomi/mimo-v2.5-pro    27 req    0.1311 credits
+```
+
+Use JSON for scripts:
+
+```powershell
+command-cc usage --json
+```
+
+## Dry Runs
+
+`--dry-run` spends no generation tokens. When logged in, it performs model discovery so the shown env slots and `availableModels` match a real launch.
+
+```powershell
+command-cc --dry-run --model xiaomi/mimo-v2.5-pro
+command-cc --dry-run --model mimo-v2.5-pro
+command-cc --dry-run --clean-model-name
+```
+
+Use this when `/model` looks wrong before burning credits on an actual prompt.
+
+## How It Works
+
+```text
+Claude Code
+  reads ANTHROPIC_BASE_URL=http://127.0.0.1:<port>
+  sends /v1/models and /v1/messages
+
+command-cc local gateway
+  answers /v1/models with Claude Code-compatible aliases
+  converts Anthropic Messages requests into Command Code app API requests
+  converts Command Code streaming output back into Anthropic-style events
+
+Command Code
+  /provider/v1/models       model discovery only
+  /alpha/generate           actual generation
+  /alpha/billing/*          usage and subscription checks
+```
+
+The real Command Code API key stays in the local gateway process. Claude Code receives a local placeholder auth token, not your Command Code key.
+
+## Troubleshooting
+
+| Symptom | What to run | Likely fix |
+| --- | --- | --- |
+| `/model` only shows MiMo, or shows MiMo five times | `command-cc --dry-run` | Restart old Claude Code sessions. New launches should place Go-plan models into clean picker slots. |
+| MiniMax or another sixth Go model disappears | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. `Default` carries the selected model; the five custom slots carry the other five models. |
+| Only two models show after adding `mimo-v2.5` | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. Stale gateway model cache is cleared before launch. |
+| A duplicate selected model appears as row 7 | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. It removes stale `~/.claude/settings.json` model values before launch. |
+| `claude-*` names show up in the first Go models | `command-cc --dry-run` then restart | Restart old sessions and make sure the wrapper is `0.6.17` or newer. |
+| `401 Invalid Authorization` | `command-cc login` then `command-cc doctor` | Refresh the official Command Code login. |
+| `402 upgrade_required` from Provider API | `command-cc doctor` | Generation should use `/alpha/generate`; Provider API is only for model discovery. |
+| `MODEL_NOT_IN_PLAN` or plan access error | `command-cc models` | Pick one of the listed models or use `--all-models` to inspect the full catalog. |
+| `spawn EINVAL` | `command-cc -- --version` | Verify Claude Code can spawn through the wrapper. Update/restart old sessions. |
+| Command Code CLI not found | `npm i -g command-code@latest` | The wrapper falls back to `npx`, but global install is cleaner. |
+| Wrong auth/account | `command-cc whoami` | Check the official Command Code account currently logged in. |
+
+## Development
+
+Useful checks:
+
+```powershell
+node --check .\bin\command-claudecode.mjs
+command-cc --version
+command-cc doctor
+command-cc models
+command-cc models --json
+command-cc -- --version
+npm pack --dry-run
+```
+
+Start only the local gateway:
+
+```powershell
+command-cc serve --port 48146
+```
+
+Inspect models from that gateway:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:48146/v1/models
+```
+
+## Notes
+
+- Node.js 20 or newer is required.
+- The wrapper is intentionally local-first: no background daemon is installed.
+- Claude Code is required separately. This package does not ship Claude Code or any modified Claude Code files.
+- Image inputs are currently represented as text placeholders when adapting to Command Code's app API.
+- The package is distributed without an open-source license unless a license file is added later.
+- The repository is packaged with only `bin/`, `assets/`, `README.md`, and `package.json`.
