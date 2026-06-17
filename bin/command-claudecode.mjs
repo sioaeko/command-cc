@@ -887,7 +887,11 @@ function printGuiDryRun(context, action) {
 }
 
 function printGuiSettingsResult(context, result) {
-  console.log(`Wrote Claude Code GUI env to ${CLAUDE_CODE_SETTINGS_PATH}`);
+  if (result.unchanged) {
+    console.log(`Claude Code GUI env already configured at ${CLAUDE_CODE_SETTINGS_PATH}`);
+  } else {
+    console.log(`Wrote Claude Code GUI env to ${CLAUDE_CODE_SETTINGS_PATH}`);
+  }
   if (result.backupPath) {
     console.log(`Backup: ${result.backupPath}`);
   }
@@ -900,28 +904,39 @@ function printGuiSettingsResult(context, result) {
 
 async function writeClaudeCodeSettingsEnv(env, selection) {
   const { raw, settings } = await readClaudeCodeSettingsObject();
-  let backupPath;
-  if (raw !== undefined) {
-    backupPath = await backupClaudeCodeSettings(raw, 'settings-before-command-cc-gui');
-  }
-
   const existingEnv = settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)
     ? settings.env
     : {};
-  settings.env = {
-    ...existingEnv,
-    ...env
-  };
+  const nextEnv = { ...existingEnv };
+  let changed = settings.env !== existingEnv;
+
+  for (const [key, value] of Object.entries(env)) {
+    if (nextEnv[key] !== value) {
+      nextEnv[key] = value;
+      changed = true;
+    }
+  }
 
   let removedModel;
   if (typeof settings.model === 'string' && isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap)) {
     removedModel = settings.model;
     delete settings.model;
+    changed = true;
   }
 
+  if (!changed) {
+    return { unchanged: true };
+  }
+
+  let backupPath;
+  if (raw !== undefined) {
+    backupPath = await backupClaudeCodeSettings(raw, 'settings-before-command-cc-gui');
+  }
+
+  settings.env = nextEnv;
   await mkdir(dirname(CLAUDE_CODE_SETTINGS_PATH), { recursive: true });
   await writeFile(CLAUDE_CODE_SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-  return { backupPath, removedModel };
+  return { backupPath, removedModel, unchanged: false };
 }
 
 async function uninstallGuiSettings(options) {
