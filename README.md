@@ -223,6 +223,8 @@ command-cc gui
 
 Leave the command running while you use the GUI. In Claude Desktop / Claude Code GUI, choose the Local environment. Cloud and remote sessions cannot reach a local `127.0.0.1` gateway on your machine.
 
+Important GUI limitation: Claude Desktop itself still requires Claude/Anthropic OAuth login before you can enter the app and open the Code tab. `command-cc` cannot bypass that GUI app login. The wrapper only routes the Local session's model requests through the Command Code gateway after the GUI is open.
+
 Useful GUI commands:
 
 ```powershell
@@ -358,6 +360,7 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | `spawn EINVAL` | `command-cc -- --version` | Verify Claude Code can spawn through the wrapper. Update/restart old sessions. |
 | Command Code CLI not found | `npm i -g command-code@latest` | The wrapper falls back to `npx`, but global install is cleaner. |
 | Wrong auth/account | `command-cc whoami` | Check the official Command Code account currently logged in. |
+| GUI asks you to log in before showing Code | Sign in to Claude Desktop | This is the GUI app's own Claude/Anthropic OAuth login. `command-cc` cannot bypass it. |
 | GUI session ignores the gateway | `command-cc gui status` | Use a Local session, restart the GUI after setup, and keep `command-cc gui` or `command-cc gui serve` running. |
 
 ## Development

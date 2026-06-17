@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.7.0';
+const VERSION = '0.7.1';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -799,6 +799,7 @@ async function guiCommand(args) {
     console.log('');
     console.log(`Start the GUI gateway with: command-cc gui serve --port ${context.options.port}`);
     console.log('Then open Claude Desktop / Claude Code GUI and start a Local session.');
+    console.log('Claude Desktop still requires its own Claude/Anthropic OAuth login; command-cc cannot bypass the GUI app login.');
     return;
   }
 
@@ -874,6 +875,7 @@ async function startGuiGateway(context) {
   console.log(`Claude settings env: ${CLAUDE_CODE_SETTINGS_PATH}`);
   console.log(`Model: ${toCleanModelAlias(context.selection.selectedModel, context.selection.modelAliasMap)}`);
   console.log('Leave this command running, then open Claude Desktop / Claude Code GUI and start a Local session.');
+  console.log('Claude Desktop still requires its own Claude/Anthropic OAuth login; command-cc only routes the Local session gateway.');
   console.log('Cloud or remote sessions cannot reach this local 127.0.0.1 gateway.');
 }
 
@@ -991,6 +993,7 @@ async function printGuiStatus() {
   console.log(`gateway: ${baseUrl || '(not set)'}`);
   console.log(`model: ${env.ANTHROPIC_MODEL || '(not set)'}`);
   console.log(`managed keys: ${configuredKeys.length}`);
+  console.log('desktop login: required by Claude Desktop; command-cc cannot bypass the GUI app OAuth login');
 
   if (baseUrl) {
     const probe = await probeGatewayHealth(baseUrl);
