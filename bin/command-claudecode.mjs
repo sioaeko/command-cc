@@ -10,8 +10,9 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.6.17';
+const VERSION = '0.7.0';
 const DEFAULT_HOST = '127.0.0.1';
+const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
 const DEFAULT_PROVIDER_BASE = 'https://api.commandcode.ai/provider';
 const GATEWAY_MODEL_PREFIX = 'claude-';
@@ -53,6 +54,15 @@ const CLAUDE_MODEL_SLOT_KEYS = [
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   'ANTHROPIC_CUSTOM_MODEL_OPTION'
 ];
+const COMMAND_CC_CLAUDE_ENV_KEYS = new Set([
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_CUSTOM_MODEL_OPTION_NAME',
+  'ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION',
+  ...CLAUDE_MODEL_SLOT_KEYS
+]);
 
 const HELP = `
 command-cc ${VERSION}
@@ -68,6 +78,8 @@ Usage:
   command-cc setup [options]
   command-cc config <get|set|unset|path> ...
   command-cc serve [options]
+  command-cc gui [options]
+  command-cc gui <setup|serve|status|uninstall> [options]
   command-cc models [options] [--json]
   command-cc usage [--json]
   command-cc doctor [options]
@@ -95,6 +107,7 @@ Examples:
   command-cc login
   command-cc setup
   command-cc
+  command-cc gui
   command-cc --model gpt-5.5 -- -p "explain this repo"
   command-cc models
   command-cc usage
@@ -179,6 +192,11 @@ async function main() {
 
   if (first === 'serve') {
     await serveOnly(parseOptions(argv.slice(1)));
+    return;
+  }
+
+  if (first === 'gui' || first === 'desktop') {
+    await guiCommand(argv.slice(1));
     return;
   }
 
@@ -746,6 +764,264 @@ async function serveOnly(options) {
 
   console.log(`Command Code Claude gateway listening at http://${gateway.host}:${gateway.port}`);
   console.log('Set ANTHROPIC_BASE_URL to that URL when launching Claude Code.');
+}
+
+async function guiCommand(args) {
+  const first = args[0];
+  const action = first && !first.startsWith('-') ? first : 'start';
+  const optionArgs = action === first ? args.slice(1) : args;
+  const options = parseOptions(optionArgs);
+
+  if (action === 'start' || action === 'run') {
+    const context = await resolveGuiGatewayContext(options);
+    if (options.dryRun) {
+      printGuiDryRun(context, 'start');
+      return;
+    }
+
+    const result = await writeClaudeCodeSettingsEnv(context.env, context.selection);
+    printGuiSettingsResult(context, result);
+    await clearClaudeCodeGatewayModelCache();
+    await startGuiGateway(context);
+    return;
+  }
+
+  if (action === 'setup' || action === 'install') {
+    const context = await resolveGuiGatewayContext(options);
+    if (options.dryRun) {
+      printGuiDryRun(context, 'setup');
+      return;
+    }
+
+    const result = await writeClaudeCodeSettingsEnv(context.env, context.selection);
+    printGuiSettingsResult(context, result);
+    await clearClaudeCodeGatewayModelCache();
+    console.log('');
+    console.log(`Start the GUI gateway with: command-cc gui serve --port ${context.options.port}`);
+    console.log('Then open Claude Desktop / Claude Code GUI and start a Local session.');
+    return;
+  }
+
+  if (action === 'serve') {
+    const context = await resolveGuiGatewayContext(options);
+    if (options.dryRun) {
+      printGuiDryRun(context, 'serve');
+      return;
+    }
+
+    await startGuiGateway(context);
+    return;
+  }
+
+  if (action === 'status') {
+    await printGuiStatus();
+    return;
+  }
+
+  if (action === 'uninstall' || action === 'remove' || action === 'unset') {
+    await uninstallGuiSettings(options);
+    return;
+  }
+
+  throw new Error(`Unknown gui action: ${action}. Use setup, serve, status, uninstall, or run command-cc gui.`);
+}
+
+async function resolveGuiGatewayContext(options) {
+  options = await withUserConfig(options);
+  if (!options.port) {
+    options.port = DEFAULT_GUI_PORT;
+  }
+
+  const apiKeyInfo = await resolveApiKeyInfo(options);
+  const apiKey = apiKeyInfo.apiKey;
+  if (!apiKey) {
+    throw new Error('Missing Command Code API key. Run "command-cc login" first, then run "command-cc gui".');
+  }
+
+  const selection = await resolveLaunchModelSelection(options, apiKey);
+  const baseUrl = `http://${options.host}:${options.port}`;
+  const env = buildClaudeEnv(
+    baseUrl,
+    selection.selectedModel,
+    selection.modelAliasMap,
+    options,
+    selection.slotModelIds
+  );
+
+  return {
+    options,
+    apiKey,
+    apiKeyInfo,
+    selection,
+    baseUrl,
+    env
+  };
+}
+
+async function startGuiGateway(context) {
+  const gateway = await startGateway({
+    host: context.options.host,
+    port: context.options.port,
+    providerBase: context.options.providerBase,
+    apiBase: commandCodeApiBaseFromProviderBase(context.options.providerBase),
+    allowedModelIds: context.selection.discoveryModelIds,
+    modelAliasMap: context.selection.modelAliasMap,
+    cleanModelName: context.options.cleanModelName,
+    apiKey: context.apiKey
+  });
+
+  console.log(`Command Code GUI gateway listening at http://${gateway.host}:${gateway.port}`);
+  console.log(`Claude settings env: ${CLAUDE_CODE_SETTINGS_PATH}`);
+  console.log(`Model: ${toCleanModelAlias(context.selection.selectedModel, context.selection.modelAliasMap)}`);
+  console.log('Leave this command running, then open Claude Desktop / Claude Code GUI and start a Local session.');
+  console.log('Cloud or remote sessions cannot reach this local 127.0.0.1 gateway.');
+}
+
+function printGuiDryRun(context, action) {
+  console.log(`command-cc gui ${action} dry run`);
+  console.log(`settings: ${CLAUDE_CODE_SETTINGS_PATH}`);
+  console.log(`gateway: ${context.baseUrl}`);
+  console.log(`auth source: ${context.apiKeyInfo.source}`);
+  console.log('');
+  console.log(JSON.stringify({ env: context.env }, null, 2));
+}
+
+function printGuiSettingsResult(context, result) {
+  console.log(`Wrote Claude Code GUI env to ${CLAUDE_CODE_SETTINGS_PATH}`);
+  if (result.backupPath) {
+    console.log(`Backup: ${result.backupPath}`);
+  }
+  if (result.removedModel) {
+    console.log(`Removed stale saved model: ${result.removedModel}`);
+  }
+  console.log(`Gateway URL: ${context.baseUrl}`);
+  console.log(`Visible models: ${context.selection.modelAliases.join(', ')}`);
+}
+
+async function writeClaudeCodeSettingsEnv(env, selection) {
+  const { raw, settings } = await readClaudeCodeSettingsObject();
+  let backupPath;
+  if (raw !== undefined) {
+    backupPath = await backupClaudeCodeSettings(raw, 'settings-before-command-cc-gui');
+  }
+
+  const existingEnv = settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)
+    ? settings.env
+    : {};
+  settings.env = {
+    ...existingEnv,
+    ...env
+  };
+
+  let removedModel;
+  if (typeof settings.model === 'string' && isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap)) {
+    removedModel = settings.model;
+    delete settings.model;
+  }
+
+  await mkdir(dirname(CLAUDE_CODE_SETTINGS_PATH), { recursive: true });
+  await writeFile(CLAUDE_CODE_SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  return { backupPath, removedModel };
+}
+
+async function uninstallGuiSettings(options) {
+  const { raw, settings } = await readClaudeCodeSettingsObject();
+  if (raw === undefined) {
+    console.log(`No Claude Code settings file found at ${CLAUDE_CODE_SETTINGS_PATH}`);
+    return;
+  }
+
+  const env = settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)
+    ? settings.env
+    : undefined;
+  const removed = [];
+
+  if (env) {
+    for (const key of COMMAND_CC_CLAUDE_ENV_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(env, key)) {
+        delete env[key];
+        removed.push(key);
+      }
+    }
+
+    if (Object.keys(env).length === 0) {
+      delete settings.env;
+    }
+  }
+
+  if (options.dryRun) {
+    console.log(`Would remove ${removed.length} command-cc env keys from ${CLAUDE_CODE_SETTINGS_PATH}`);
+    for (const key of removed) {
+      console.log(`  ${key}`);
+    }
+    return;
+  }
+
+  const backupPath = await backupClaudeCodeSettings(raw, 'settings-before-command-cc-gui-uninstall');
+  await writeFile(CLAUDE_CODE_SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  console.log(`Removed ${removed.length} command-cc env keys from ${CLAUDE_CODE_SETTINGS_PATH}`);
+  console.log(`Backup: ${backupPath}`);
+}
+
+async function printGuiStatus() {
+  const { settings } = await readClaudeCodeSettingsObject();
+  const env = settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)
+    ? settings.env
+    : {};
+  const configuredKeys = [...COMMAND_CC_CLAUDE_ENV_KEYS].filter((key) => Object.prototype.hasOwnProperty.call(env, key));
+  const baseUrl = env.ANTHROPIC_BASE_URL || '';
+
+  console.log(`settings: ${CLAUDE_CODE_SETTINGS_PATH}`);
+  console.log(`configured: ${configuredKeys.length ? 'yes' : 'no'}`);
+  console.log(`gateway: ${baseUrl || '(not set)'}`);
+  console.log(`model: ${env.ANTHROPIC_MODEL || '(not set)'}`);
+  console.log(`managed keys: ${configuredKeys.length}`);
+
+  if (baseUrl) {
+    const probe = await probeGatewayHealth(baseUrl);
+    console.log(`gateway health: ${probe.ok ? 'ok' : `not reachable (${probe.message})`}`);
+  }
+}
+
+async function readClaudeCodeSettingsObject() {
+  let raw;
+  try {
+    raw = await readFile(CLAUDE_CODE_SETTINGS_PATH, 'utf8');
+  } catch {
+    return { raw: undefined, settings: {} };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      raw,
+      settings: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    };
+  } catch {
+    const backupPath = await backupClaudeCodeSettings(raw, 'settings-invalid-before-command-cc-gui');
+    console.error(`command-cc: existing Claude Code settings JSON was invalid; backed it up to ${backupPath}`);
+    return { raw: undefined, settings: {} };
+  }
+}
+
+async function backupClaudeCodeSettings(raw, prefix) {
+  await mkdir(CLAUDE_CODE_BACKUP_DIR, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = join(CLAUDE_CODE_BACKUP_DIR, `${prefix}-${stamp}.json`);
+  await writeFile(backupPath, raw, 'utf8');
+  return backupPath;
+}
+
+async function probeGatewayHealth(baseUrl) {
+  try {
+    const response = await fetch(new URL('/health', baseUrl));
+    if (!response.ok) {
+      return { ok: false, message: `HTTP ${response.status}` };
+    }
+    return { ok: true, message: 'ok' };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function listModels(options) {

@@ -39,6 +39,14 @@ Inside Claude Code:
 /model
 ```
 
+For Claude Code Desktop / GUI local sessions:
+
+```powershell
+command-cc gui
+```
+
+Keep that terminal open, then open Claude Desktop / Claude Code GUI, choose a Local environment, and start a session.
+
 For a one-shot prompt:
 
 ```powershell
@@ -50,6 +58,7 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | Feature | What it does |
 | --- | --- |
 | Global launcher | Run `command-cc` from any project, using your existing Claude Code install. |
+| GUI bridge | Configure Claude Code Desktop / GUI local sessions and run a fixed-port local gateway. |
 | Command Code login reuse | Reads the official Command Code login from `~/.commandcode/auth.json`. |
 | Local gateway | Presents an Anthropic-compatible API to Claude Code on `127.0.0.1`. |
 | Go-plan filtering | Shows the Go-friendly Command Code models when the logged-in account is on Go. |
@@ -71,6 +80,11 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | `command-cc models --json` | Print the model list as JSON for scripts/debugging. |
 | `command-cc usage` | Show Command Code credits and usage. |
 | `command-cc usage --json` | Print raw usage/account/credit payloads as JSON. |
+| `command-cc gui` | Configure GUI local-session env and start the foreground gateway. |
+| `command-cc gui setup` | Write GUI local-session env into `~/.claude/settings.json` without starting the gateway. |
+| `command-cc gui serve` | Start only the fixed-port GUI gateway. |
+| `command-cc gui status` | Show the GUI env config and gateway health. |
+| `command-cc gui uninstall` | Remove command-cc managed env keys from Claude Code settings. |
 | `command-cc doctor` | Check Claude Code, auth, plan detection, model discovery, and selected model. |
 | `command-cc env` | Print Anthropic env vars for manual gateway wiring. |
 | `command-cc serve` | Start only the local gateway. |
@@ -199,6 +213,44 @@ Default Go-plan picker aliases currently look like:
 
 When Claude Code sends `mimo-v2.5-pro`, the gateway forwards `xiaomi/mimo-v2.5-pro` to Command Code.
 
+## Claude Code Desktop / GUI
+
+Claude Code Desktop local sessions do not always inherit the same shell env as your terminal. `command-cc gui` writes the required Claude env keys into your user `~/.claude/settings.json` under `env`, then starts a fixed-port local gateway:
+
+```powershell
+command-cc gui
+```
+
+Leave the command running while you use the GUI. In Claude Desktop / Claude Code GUI, choose the Local environment. Cloud and remote sessions cannot reach a local `127.0.0.1` gateway on your machine.
+
+Useful GUI commands:
+
+```powershell
+command-cc gui setup
+command-cc gui serve
+command-cc gui status
+command-cc gui uninstall
+command-cc gui --dry-run
+```
+
+Default GUI gateway:
+
+```text
+http://127.0.0.1:64726
+```
+
+You can choose another fixed port:
+
+```powershell
+command-cc gui --port 48146
+```
+
+The GUI setup edits only the `env` keys managed by this wrapper and backs up the previous settings file in:
+
+```text
+~/.claude/backups/
+```
+
 ## Go Plan Behavior
 
 When the logged-in account is detected as a Go plan, the picker is filtered to the Go-friendly models known to this wrapper:
@@ -306,6 +358,7 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | `spawn EINVAL` | `command-cc -- --version` | Verify Claude Code can spawn through the wrapper. Update/restart old sessions. |
 | Command Code CLI not found | `npm i -g command-code@latest` | The wrapper falls back to `npx`, but global install is cleaner. |
 | Wrong auth/account | `command-cc whoami` | Check the official Command Code account currently logged in. |
+| GUI session ignores the gateway | `command-cc gui status` | Use a Local session, restart the GUI after setup, and keep `command-cc gui` or `command-cc gui serve` running. |
 
 ## Development
 
@@ -317,6 +370,8 @@ command-cc --version
 command-cc doctor
 command-cc models
 command-cc models --json
+command-cc gui --dry-run
+command-cc gui status
 command-cc -- --version
 npm pack --dry-run
 ```
