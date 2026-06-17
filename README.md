@@ -47,6 +47,12 @@ command-cc gui
 
 Keep that terminal open, then open Claude Desktop / Claude Code GUI, choose a Local environment, and start a session.
 
+For DeepClaude-style browser Remote Control:
+
+```powershell
+command-cc remote
+```
+
 For a one-shot prompt:
 
 ```powershell
@@ -59,6 +65,7 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | --- | --- |
 | Global launcher | Run `command-cc` from any project, using your existing Claude Code install. |
 | GUI bridge | Configure Claude Code Desktop / GUI local sessions and run a fixed-port local gateway. |
+| Remote Control bridge | Start `claude remote-control` with model requests routed through Command Code. |
 | Command Code login reuse | Reads the official Command Code login from `~/.commandcode/auth.json`. |
 | Local gateway | Presents an Anthropic-compatible API to Claude Code on `127.0.0.1`. |
 | Go-plan filtering | Shows the Go-friendly Command Code models when the logged-in account is on Go. |
@@ -85,6 +92,8 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | `command-cc gui serve` | Start only the fixed-port GUI gateway. |
 | `command-cc gui status` | Show the GUI env config and gateway health. |
 | `command-cc gui uninstall` | Remove command-cc managed env keys from Claude Code settings. |
+| `command-cc remote` | Start DeepClaude-style browser Remote Control through a local Command Code gateway. |
+| `command-cc --remote` | Same as `command-cc remote`. |
 | `command-cc doctor` | Check Claude Code, auth, plan detection, model discovery, and selected model. |
 | `command-cc env` | Print Anthropic env vars for manual gateway wiring. |
 | `command-cc serve` | Start only the local gateway. |
@@ -253,6 +262,42 @@ The GUI setup edits only the `env` keys managed by this wrapper and backs up the
 ~/.claude/backups/
 ```
 
+## Remote Control
+
+`command-cc remote` starts a DeepClaude-style Remote Control session:
+
+```powershell
+command-cc remote
+```
+
+What happens:
+
+```text
+claude remote-control
+  -> Anthropic OAuth / Remote Control bridge stays with Claude
+  -> model requests go to command-cc local gateway
+  -> command-cc forwards generation to Command Code
+```
+
+This is not the Claude Desktop Code tab. It is Claude Code Remote Control, which opens a `claude.ai/code/session_...` browser URL while the local `claude` process keeps running.
+
+Remote mode intentionally does not set `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` for Claude Code. Those can break the Remote Control OAuth bridge. The Command Code key stays inside the local gateway process.
+
+Pass Remote Control arguments after `--`:
+
+```powershell
+command-cc remote -- --name "Command Code session"
+command-cc --remote -- --name "Command Code session"
+```
+
+Dry-run without starting Claude Code:
+
+```powershell
+command-cc remote --dry-run
+```
+
+Remote Control still requires Claude/Anthropic login and Remote Control eligibility. If Claude blocks your account before the local session starts, this wrapper cannot bypass that entitlement check.
+
 ## Go Plan Behavior
 
 When the logged-in account is detected as a Go plan, the picker is filtered to the Go-friendly models known to this wrapper:
@@ -363,6 +408,7 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | GUI asks you to log in before showing Code | Sign in to Claude Desktop | This is the GUI app's own Claude/Anthropic OAuth login. `command-cc` cannot bypass it. |
 | GUI says your account is on the Free plan | Use terminal `command-cc`, or use a Claude account with Code access | Claude Code Desktop blocks Free-plan accounts before gateway routing can start. |
 | GUI session ignores the gateway | `command-cc gui status` | Use a Local session, restart the GUI after setup, and keep `command-cc gui` or `command-cc gui serve` running. |
+| Remote Control fails before showing a URL | `claude doctor`, then `command-cc remote --dry-run` | Remote Control eligibility/OAuth is checked by Anthropic before model routing starts. |
 
 ## Development
 
@@ -376,6 +422,7 @@ command-cc models
 command-cc models --json
 command-cc gui --dry-run
 command-cc gui status
+command-cc remote --dry-run
 command-cc -- --version
 npm pack --dry-run
 ```

@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.7.2';
+const VERSION = '0.8.0';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -80,6 +80,7 @@ Usage:
   command-cc serve [options]
   command-cc gui [options]
   command-cc gui <setup|serve|status|uninstall> [options]
+  command-cc remote [options] [-- <claude remote-control args...>]
   command-cc models [options] [--json]
   command-cc usage [--json]
   command-cc doctor [options]
@@ -108,6 +109,7 @@ Examples:
   command-cc setup
   command-cc
   command-cc gui
+  command-cc remote
   command-cc --model gpt-5.5 -- -p "explain this repo"
   command-cc models
   command-cc usage
@@ -131,7 +133,12 @@ async function main() {
 
   if (!first || first === 'launch') {
     const args = first === 'launch' ? argv.slice(1) : argv;
-    await launchClaude(parseOptions(args));
+    const options = parseOptions(args);
+    if (options.remote) {
+      await launchRemoteControl(options);
+    } else {
+      await launchClaude(options);
+    }
     return;
   }
 
@@ -200,6 +207,11 @@ async function main() {
     return;
   }
 
+  if (first === 'remote' || first === 'rc' || first === 'remote-control') {
+    await launchRemoteControl(parseOptions(argv.slice(1)));
+    return;
+  }
+
   if (first === 'models') {
     await listModels(parseOptions(argv.slice(1)));
     return;
@@ -220,7 +232,12 @@ async function main() {
     return;
   }
 
-  await launchClaude(parseOptions(argv));
+  const options = parseOptions(argv);
+  if (options.remote) {
+    await launchRemoteControl(options);
+  } else {
+    await launchClaude(options);
+  }
 }
 
 function parseOptions(args) {
@@ -241,6 +258,7 @@ function parseOptions(args) {
     filterModelsByPlanExplicit: false,
     cleanModelName: false,
     cleanModelNameExplicit: false,
+    remote: false,
     json: false,
     claudeArgs: []
   };
@@ -262,6 +280,11 @@ function parseOptions(args) {
 
     if (arg === '--dry-run') {
       options.dryRun = true;
+      continue;
+    }
+
+    if (arg === '--remote' || arg === '--remote-control' || arg === '--rc') {
+      options.remote = true;
       continue;
     }
 
@@ -739,6 +762,103 @@ async function launchClaude(options) {
   }
 }
 
+async function launchRemoteControl(options) {
+  options = await withUserConfig(options);
+  const apiKeyInfo = await resolveApiKeyInfo(options);
+  const apiKey = apiKeyInfo.apiKey;
+  const claudeCommand = options.claude || await findExecutable('claude') || 'claude';
+
+  if (options.dryRun) {
+    const selection = await resolveDryRunModelSelection(options, apiKey);
+    const selectedModel = selection.selectedModel;
+    const port = options.port || 44004;
+    const baseUrl = `http://${options.host}:${port}`;
+    const remoteArgs = buildRemoteControlArgs(options.claudeArgs, selection.modelAliases, options);
+    const env = buildClaudeEnv(
+      baseUrl,
+      selectedModel,
+      selection.modelAliasMap,
+      options,
+      selection.slotModelIds,
+      { includeAuthToken: false }
+    );
+    console.log(formatCommand(claudeCommand, remoteArgs));
+    printRemoteEnvSummary(env, options);
+    return;
+  }
+
+  if (!apiKey) {
+    throw new Error('Missing Command Code API key. Run "command-cc login" first, then run "command-cc remote".');
+  }
+
+  const {
+    account,
+    pickerModelIds,
+    selectedModel,
+    modelAliasMap,
+    modelAliases,
+    slotModelIds,
+    discoveryModelIds,
+    wrapperModelIds
+  } = await resolveLaunchModelSelection(options, apiKey);
+  const remoteArgs = buildRemoteControlArgs(options.claudeArgs, modelAliases, options);
+
+  if (!options.claude && !await findExecutable('claude')) {
+    throw new Error('Could not find Claude Code on PATH. Install Claude Code or pass --claude <path>.');
+  }
+
+  const gateway = await startGateway({
+    host: options.host,
+    port: options.port,
+    providerBase: options.providerBase,
+    apiBase: commandCodeApiBaseFromProviderBase(options.providerBase),
+    allowedModelIds: discoveryModelIds,
+    modelAliasMap,
+    cleanModelName: options.cleanModelName,
+    apiKey,
+    passthroughBase: 'https://api.anthropic.com'
+  });
+
+  const baseUrl = `http://${gateway.host}:${gateway.port}`;
+  const env = {
+    ...process.env
+  };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  Object.assign(env, buildClaudeEnv(
+    baseUrl,
+    selectedModel,
+    modelAliasMap,
+    options,
+    slotModelIds,
+    { includeAuthToken: false }
+  ));
+
+  console.error(`command-cc: starting Claude Code Remote Control through ${baseUrl}`);
+  console.error(`command-cc: requested model ${selectedModel}`);
+  console.error(`command-cc: auth source ${apiKeyInfo.source}`);
+  console.error('command-cc: ANTHROPIC_AUTH_TOKEN is intentionally unset so Remote Control can use Claude OAuth for the bridge');
+  console.error('command-cc: non-model Remote Control API requests are passed through to Anthropic');
+  if (account?.planId) {
+    console.error(`command-cc: detected Command Code plan ${account.planId}`);
+  }
+  if (isGoPlan(account?.planId) && options.filterModelsByPlan) {
+    console.error(`command-cc: /model picker filtered to ${pickerModelIds.length} Go-plan models`);
+  }
+  if (options.restrictModelPicker) {
+    console.error(`command-cc: /model picker restricted to ${modelAliases.length} Command Code models`);
+  }
+  console.error('command-cc: Remote Control still requires Claude/Anthropic login and Remote Control eligibility');
+
+  try {
+    await clearStaleClaudeCodeSavedModel(wrapperModelIds, modelAliasMap);
+    await clearClaudeCodeGatewayModelCache();
+    await spawnAndForward(claudeCommand, remoteArgs, { env });
+  } finally {
+    await gateway.close();
+  }
+}
+
 async function serveOnly(options) {
   options = await withUserConfig(options);
   const apiKey = await resolveApiKey(options);
@@ -1205,7 +1325,7 @@ async function printEnv(options) {
   }
 }
 
-function buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options = {}, slotModelIds = []) {
+function buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options = {}, slotModelIds = [], envOptions = {}) {
   const selectedAlias = selectedModel.startsWith('<')
     ? selectedModel
     : toCleanModelAlias(selectedModel, modelAliasMap);
@@ -1214,12 +1334,15 @@ function buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options = {}, slo
     : [selectedAlias];
   const env = {
     ANTHROPIC_BASE_URL: baseUrl,
-    ANTHROPIC_AUTH_TOKEN: 'command-code-local-gateway',
     CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
     ANTHROPIC_MODEL: selectedAlias,
     ANTHROPIC_CUSTOM_MODEL_OPTION_NAME: displayModelNameForAlias(slotAliases.at(-1) || selectedAlias, modelAliasMap),
     ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION: 'Custom Command Code model'
   };
+
+  if (envOptions.includeAuthToken !== false) {
+    env.ANTHROPIC_AUTH_TOKEN = 'command-code-local-gateway';
+  }
 
   CLAUDE_MODEL_SLOT_KEYS.forEach((key, index) => {
     env[key] = slotAliases[index] || selectedAlias;
@@ -1519,6 +1642,10 @@ function buildClaudeArgs(claudeArgs, modelAliases, options) {
   return ['--settings', JSON.stringify(settings), ...claudeArgs];
 }
 
+function buildRemoteControlArgs(claudeArgs, modelAliases, options) {
+  return buildClaudeArgs(['remote-control', ...claudeArgs], modelAliases, options);
+}
+
 async function readCommandCodeAuth() {
   const authPath = commandCodeAuthPath();
 
@@ -1618,7 +1745,41 @@ async function handleGatewayRequest(request, response, config) {
     return;
   }
 
+  if (config.passthroughBase) {
+    await proxyPassthrough(request, response, config, url);
+    return;
+  }
+
   sendAnthropicError(response, 404, 'not_found_error', `No route for ${request.method} ${url.pathname}`);
+}
+
+async function proxyPassthrough(request, response, config, url) {
+  const target = new URL(`${url.pathname}${url.search}`, config.passthroughBase);
+  const headers = { ...request.headers };
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
+  delete headers['transfer-encoding'];
+
+  const body = request.method === 'GET' || request.method === 'HEAD'
+    ? undefined
+    : await readRaw(request);
+
+  const upstream = await fetch(target, {
+    method: request.method,
+    headers,
+    body
+  });
+
+  response.statusCode = upstream.status;
+  upstream.headers.forEach((value, key) => {
+    if (!['connection', 'keep-alive', 'transfer-encoding'].includes(key.toLowerCase())) {
+      response.setHeader(key, value);
+    }
+  });
+
+  const buffer = Buffer.from(await upstream.arrayBuffer());
+  response.end(buffer);
 }
 
 async function proxyModels(response, config) {
@@ -2864,14 +3025,18 @@ async function fetchModels(providerBase, apiKey) {
 }
 
 async function readJson(request) {
+  const text = (await readRaw(request)).toString('utf8');
+  return parseJsonOrError(text || '{}');
+}
+
+async function readRaw(request) {
   const chunks = [];
 
   for await (const chunk of request) {
     chunks.push(chunk);
   }
 
-  const text = Buffer.concat(chunks).toString('utf8');
-  return parseJsonOrError(text || '{}');
+  return Buffer.concat(chunks);
 }
 
 function parseJsonOrError(text) {
@@ -3167,5 +3332,16 @@ function printEnvSummary(env, options) {
   for (const [key, value] of Object.entries(env)) {
     console.log(`${key}=${value}`);
   }
+  console.log(`${options.apiKeyEnv}=<read by local gateway>`);
+}
+
+function printRemoteEnvSummary(env, options) {
+  console.log('');
+  console.log('Remote Control environment overrides:');
+  for (const [key, value] of Object.entries(env)) {
+    console.log(`${key}=${value}`);
+  }
+  console.log('ANTHROPIC_AUTH_TOKEN=<unset for Claude Remote Control OAuth bridge>');
+  console.log('ANTHROPIC_API_KEY=<unset for Claude Remote Control OAuth bridge>');
   console.log(`${options.apiKeyEnv}=<read by local gateway>`);
 }
