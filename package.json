@@ -1,6 +1,6 @@
 {
   "name": "command-cc",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": false,
   "description": "Local wrapper that routes your installed Claude Code CLI to Command Code Go-plan models.",
   "type": "module",
