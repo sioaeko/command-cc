@@ -228,6 +228,29 @@ Default Go-plan picker aliases currently look like:
 
 When Claude Code sends `mimo-v2.5-pro`, the gateway forwards `xiaomi/mimo-v2.5-pro` to Command Code.
 
+### Qwen 3.7 Max
+
+`qwen3.7-max` is part of the Go-plan allowlist and remains usable through `command-cc`, but it may not appear in the default `/model` screen on Claude Code 2.1.x. Claude Code currently shows one built-in `Default` row, five custom slots, and the checked current model; because the visible slots prioritize `deepseek-v4-pro`, `mini-max-m3`, `mimo-v2.5`, and `mimo-v2.5-pro`, Qwen can be hidden from the picker even though the gateway still accepts it.
+
+Run Qwen directly:
+
+```powershell
+command-cc --model qwen3.7-max
+```
+
+Save Qwen as your wrapper default:
+
+```powershell
+command-cc config set model qwen3.7-max
+command-cc
+```
+
+Check that it resolves without spending tokens:
+
+```powershell
+command-cc --dry-run --model qwen3.7-max
+```
+
 `nvidia/nemotron-3-ultra-550b-a55b` is still recognized, but it is not in the default seven-item picker. Use `--model nemotron-3-ultra-550b-a55b` or `--all-models` if you want it.
 
 ## Claude Code Desktop / GUI
