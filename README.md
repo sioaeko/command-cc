@@ -200,11 +200,11 @@ $env:COMMAND_CODE_API_KEY = "<command-code-api-key>"
 
 ## Model Picker Modes
 
-Claude Code has one `Default` row plus five custom model slots. To keep all six Go-plan models visible, this wrapper points `Default` at the selected model and fills the five custom slots with the remaining Go-plan models.
+Claude Code has one `Default` row plus five custom model slots. This wrapper points `Default` at the selected model, fills the five custom slots with priority Go-plan models, and exposes any additional Go-plan models through gateway discovery / `availableModels`.
 
 | Mode | Command | `/model` behavior | Best for |
 | --- | --- | --- | --- |
-| Default | `command-cc` | Shows the Go-plan models as clean aliases like `mimo-v2.5-pro`, `deepseek-v4-pro`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
+| Default | `command-cc` | Shows the Go-plan models as clean aliases like `glm-5.2`, `mimo-v2.5-pro`, `deepseek-v4-pro`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
 | Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
 | Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
 | Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |
@@ -213,6 +213,7 @@ Default Go-plan picker aliases currently look like:
 
 | Real Command Code id | Claude Code visible alias |
 | --- | --- |
+| `zai-org/GLM-5.2` | `glm-5.2` |
 | `deepseek/deepseek-v4-pro` | `deepseek-v4-pro` |
 | `nvidia/nemotron-3-ultra-550b-a55b` | `nemotron-3-ultra-550b-a55b` |
 | `Qwen/Qwen3.7-Max` | `qwen3.7-max` |
@@ -300,10 +301,11 @@ Remote Control still requires Claude/Anthropic login and Remote Control eligibil
 
 ## Go Plan Behavior
 
-When the logged-in account is detected as a Go plan, the picker is filtered to the Go-friendly models known to this wrapper:
+By default, the picker is filtered to the Go-friendly models known to this wrapper. The wrapper keeps this filter even when Command Code account/plan endpoints are unavailable, because model discovery can still work while plan metadata is temporarily missing:
 
 ```text
 deepseek/deepseek-v4-pro
+zai-org/GLM-5.2
 nvidia/nemotron-3-ultra-550b-a55b
 Qwen/Qwen3.7-Max
 MiniMaxAI/MiniMax-M3
@@ -395,7 +397,7 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | Symptom | What to run | Likely fix |
 | --- | --- | --- |
 | `/model` only shows MiMo, or shows MiMo five times | `command-cc --dry-run` | Restart old Claude Code sessions. New launches should place Go-plan models into clean picker slots. |
-| MiniMax or another sixth Go model disappears | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. `Default` carries the selected model; the five custom slots carry the other five models. |
+| MiniMax, GLM, or another Go model disappears | `command-cc --dry-run` then restart | Make sure the wrapper is current. `Default` carries the selected model, five custom slots carry priority models, and extra models are exposed through gateway discovery / `availableModels`. |
 | Only two models show after adding `mimo-v2.5` | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. Stale gateway model cache is cleared before launch. |
 | A duplicate selected model appears as row 7 | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. It removes stale `~/.claude/settings.json` model values before launch. |
 | `claude-*` names show up in the first Go models | `command-cc --dry-run` then restart | Restart old sessions and make sure the wrapper is `0.6.17` or newer. |

@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.0';
+const VERSION = '0.8.1';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -27,6 +27,7 @@ const CLAUDE_CODE_BACKUP_DIR = join(homedir(), '.claude', 'backups');
 const CLAUDE_CODE_GATEWAY_MODELS_CACHE_PATH = join(homedir(), '.claude', 'cache', 'gateway-models.json');
 const COMMAND_CODE_CLI_VERSION = '0.37.2';
 const GO_PLAN_MODEL_IDS = new Set([
+  'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',
   'nvidia/nemotron-3-ultra-550b-a55b',
   'Qwen/Qwen3.7-Max',
@@ -35,6 +36,7 @@ const GO_PLAN_MODEL_IDS = new Set([
   'xiaomi/mimo-v2.5'
 ]);
 const GO_PLAN_SLOT_PRIORITY = [
+  'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',
   'MiniMaxAI/MiniMax-M3',
   'Qwen/Qwen3.7-Max',
@@ -743,7 +745,7 @@ async function launchClaude(options) {
     console.error(`command-cc: detected plan ${account.planId}`);
   }
   console.error(`command-cc: generation API ${commandCodeApiBaseFromProviderBase(options.providerBase)}/alpha/generate`);
-  if (isGoPlan(account?.planId) && options.filterModelsByPlan) {
+  if (shouldFilterToGoPlanModels(account, options)) {
     console.error(`command-cc: /model picker filtered to ${pickerModelIds.length} Go-plan models`);
   }
   if (options.cleanModelName) {
@@ -842,7 +844,7 @@ async function launchRemoteControl(options) {
   if (account?.planId) {
     console.error(`command-cc: detected Command Code plan ${account.planId}`);
   }
-  if (isGoPlan(account?.planId) && options.filterModelsByPlan) {
+  if (shouldFilterToGoPlanModels(account, options)) {
     console.error(`command-cc: /model picker filtered to ${pickerModelIds.length} Go-plan models`);
   }
   if (options.restrictModelPicker) {
@@ -1190,14 +1192,14 @@ async function listModels(options) {
     console.log(JSON.stringify({
       count: rows.length,
       planId: account?.planId || '',
-      planFiltered: Boolean(isGoPlan(account?.planId) && options.filterModelsByPlan),
+      planFiltered: shouldFilterToGoPlanModels(account, options),
       models: rows
     }, null, 2));
     return;
   }
 
-  if (isGoPlan(account?.planId) && options.filterModelsByPlan) {
-    console.error(`command-cc: showing ${data.length} Go-plan models for ${account.planId}`);
+  if (shouldFilterToGoPlanModels(account, options)) {
+    console.error(`command-cc: showing ${data.length} Go-plan models for ${account.planId || 'unknown plan'}`);
   }
 
   for (const row of rows) {
@@ -1237,7 +1239,7 @@ async function doctor(options) {
     if (account?.planId) {
       console.log(`plan: ${account.planId}`);
     }
-    if (isGoPlan(account?.planId) && options.filterModelsByPlan) {
+    if (shouldFilterToGoPlanModels(account, options)) {
       console.log(`plan filter: ${filteredModelIds.length} Go-plan models`);
     }
     selectedModel = resolveKnownModelId(selectedModel, modelIds) || selectedModel || pickInitialProviderModel(filteredModelIds);
@@ -2976,12 +2978,27 @@ async function fetchAccountSummary(apiBase, apiKey) {
 }
 
 function filterModelIdsForPlan(modelIds, account, options) {
-  if (!options.filterModelsByPlan || !isGoPlan(account?.planId)) {
+  if (!shouldFilterToGoPlanModels(account, options)) {
     return modelIds;
   }
 
   const filtered = modelIds.filter(isGoPlanModelId);
   return filtered.length > 0 ? filtered : modelIds;
+}
+
+function shouldFilterToGoPlanModels(account, options) {
+  if (!options.filterModelsByPlan) {
+    return false;
+  }
+
+  if (isGoPlan(account?.planId)) {
+    return true;
+  }
+
+  // Command Code account endpoints can be unavailable or return no plan even
+  // when model discovery works. This wrapper is Go-plan first, so keep the
+  // curated Go model list by default and let --all-models opt out.
+  return !account?.planId || options.filterModelsByPlanExplicit;
 }
 
 function isGoPlan(planId) {
