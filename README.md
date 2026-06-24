@@ -33,6 +33,8 @@ command-cc doctor
 command-cc
 ```
 
+The default model is `deepseek-v4-flash`. The default picker is capped to seven visible Go-plan choices: `deepseek-v4-flash`, `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`.
+
 Inside Claude Code:
 
 ```text
@@ -204,7 +206,7 @@ Claude Code has one `Default` row plus five custom model slots. This wrapper poi
 
 | Mode | Command | `/model` behavior | Best for |
 | --- | --- | --- | --- |
-| Default | `command-cc` | Shows the Go-plan models as clean aliases like `glm-5.2`, `mimo-v2.5-pro`, `deepseek-v4-pro`, `deepseek-v4-flash`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
+| Default | `command-cc` | Starts on `deepseek-v4-flash` and shows the six remaining priority Go-plan models: `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`. | Switching among the main Go-plan models inside Claude Code. |
 | Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
 | Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
 | Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |
@@ -223,6 +225,8 @@ Default Go-plan picker aliases currently look like:
 | `xiaomi/mimo-v2.5` | `mimo-v2.5` |
 
 When Claude Code sends `mimo-v2.5-pro`, the gateway forwards `xiaomi/mimo-v2.5-pro` to Command Code.
+
+`nvidia/nemotron-3-ultra-550b-a55b` is still recognized, but it is not in the default seven-item picker. Use `--model nemotron-3-ultra-550b-a55b` or `--all-models` if you want it.
 
 ## Claude Code Desktop / GUI
 
@@ -302,13 +306,12 @@ Remote Control still requires Claude/Anthropic login and Remote Control eligibil
 
 ## Go Plan Behavior
 
-By default, the picker is filtered to the Go-friendly models known to this wrapper. The wrapper keeps this filter even when Command Code account/plan endpoints are unavailable, because model discovery can still work while plan metadata is temporarily missing:
+By default, the picker is filtered to seven priority Go-friendly models known to this wrapper. The wrapper keeps this filter even when Command Code account/plan endpoints are unavailable, because model discovery can still work while plan metadata is temporarily missing:
 
 ```text
 deepseek/deepseek-v4-pro
 deepseek/deepseek-v4-flash
 zai-org/GLM-5.2
-nvidia/nemotron-3-ultra-550b-a55b
 Qwen/Qwen3.7-Max
 MiniMaxAI/MiniMax-M3
 xiaomi/mimo-v2.5-pro
