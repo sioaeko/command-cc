@@ -204,11 +204,11 @@ $env:COMMAND_CODE_API_KEY = "<command-code-api-key>"
 
 ## Model Picker Modes
 
-Claude Code has one built-in `Default` row plus five custom model slots. This wrapper sets the real active model with `ANTHROPIC_MODEL`, fills the five custom slots with priority Go-plan models, and exposes any additional Go-plan models through gateway discovery / `availableModels`.
+Claude Code has one built-in `Default` row plus five custom model slots. This wrapper sets the real active model with `ANTHROPIC_MODEL`, lets Claude Code's built-in `Default` row carry the `deepseek-v4-pro` tier label when Claude Code renders it that way, fills the five custom slots with the other priority Go-plan models, and exposes the same list through gateway discovery / `availableModels`.
 
 | Mode | Command | `/model` behavior | Best for |
 | --- | --- | --- | --- |
-| Default | `command-cc` | Starts on `deepseek-v4-flash` and shows the priority Go-plan models: `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`. Claude Code may still render its built-in `Default` row label from its own tier mapping; the checked row and startup log are the source of truth. | Switching among the main Go-plan models inside Claude Code. |
+| Default | `command-cc` | Starts on `deepseek-v4-flash`. In current Claude Code builds the visible rows are typically `Default`/`deepseek-v4-pro`, then `glm-5.2`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, `mimo-v2.5-pro`, and the checked `deepseek-v4-flash` row. Claude Code may still render its built-in `Default` row label from its own tier mapping; the checked row and startup log are the source of truth. | Switching among the main Go-plan models inside Claude Code. |
 | Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
 | Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
 | Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |
