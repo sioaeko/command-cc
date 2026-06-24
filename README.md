@@ -275,6 +275,39 @@ command-cc gui uninstall
 command-cc gui --dry-run
 ```
 
+### ConnectionRefused
+
+If Claude Code prints `Unable to connect to API (ConnectionRefused)`, it is trying to call a local gateway port where no `command-cc` server is listening.
+
+For CLI use, start Claude through the wrapper:
+
+```powershell
+command-cc
+```
+
+Do not start plain `claude` after running `command-cc gui setup`; the GUI setup stores `ANTHROPIC_BASE_URL=http://127.0.0.1:64726` in `~/.claude/settings.json`, and plain `claude` will try that port even if the gateway is not running.
+
+For GUI use, keep the gateway process open:
+
+```powershell
+command-cc gui
+```
+
+Or split setup and serving:
+
+```powershell
+command-cc gui setup
+command-cc gui serve
+```
+
+Check the gateway:
+
+```powershell
+command-cc gui status
+```
+
+Starting with `command-cc` 0.8.9, CLI launches also pass the current gateway port through `--settings.env`, so stale GUI settings cannot override the wrapper's live random port.
+
 Default GUI gateway:
 
 ```text

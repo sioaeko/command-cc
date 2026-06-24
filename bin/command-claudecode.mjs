@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.8';
+const VERSION = '0.8.9';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -78,6 +78,14 @@ const COMMAND_CC_CLAUDE_ENV_KEYS = new Set([
 const COMMAND_CC_CLAUDE_SETTINGS_KEYS = new Set([
   'availableModels',
   'enforceAvailableModels'
+]);
+const COMMAND_CC_CLAUDE_SLOT_MODEL_SETTINGS = new Set([
+  'default',
+  'fable',
+  'opus',
+  'sonnet',
+  'haiku',
+  'custom'
 ]);
 
 const HELP = `
@@ -706,9 +714,9 @@ async function launchClaude(options) {
   if (options.dryRun) {
     const selection = await resolveDryRunModelSelection(options, apiKey);
     const selectedModel = selection.selectedModel;
-    const claudeArgs = buildClaudeArgs(options.claudeArgs, selection.modelAliases, options, selection);
     const port = options.port || 44003;
     const env = buildClaudeEnv(`http://${options.host}:${port}`, selectedModel, selection.modelAliasMap, options, selection.slotModelIds);
+    const claudeArgs = buildClaudeArgs(options.claudeArgs, selection.modelAliases, options, env);
     console.log(formatCommand(claudeCommand, claudeArgs));
     printEnvSummary(env, options);
     return;
@@ -730,12 +738,6 @@ async function launchClaude(options) {
     wrapperModelIds,
     selectedModelExplicit
   } = await resolveLaunchModelSelection(options, apiKey);
-  const claudeArgs = buildClaudeArgs(options.claudeArgs, modelAliases, options, {
-    selectedModel,
-    selectedModelExplicit,
-    modelAliasMap
-  });
-
   if (!options.claude && !await findExecutable('claude')) {
     throw new Error('Could not find Claude Code on PATH. Install Claude Code or pass --claude <path>.');
   }
@@ -752,9 +754,11 @@ async function launchClaude(options) {
   });
 
   const baseUrl = `http://${gateway.host}:${gateway.port}`;
+  const claudeEnv = buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options, slotModelIds);
+  const claudeArgs = buildClaudeArgs(options.claudeArgs, modelAliases, options, claudeEnv);
   const env = {
     ...process.env,
-    ...buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options, slotModelIds)
+    ...claudeEnv
   };
 
   console.error(`command-cc: routing Claude Code through ${baseUrl}`);
@@ -794,7 +798,6 @@ async function launchRemoteControl(options) {
     const selectedModel = selection.selectedModel;
     const port = options.port || 44004;
     const baseUrl = `http://${options.host}:${port}`;
-    const remoteArgs = buildRemoteControlArgs(options.claudeArgs, selection.modelAliases, options, selection);
     const env = buildClaudeEnv(
       baseUrl,
       selectedModel,
@@ -805,6 +808,7 @@ async function launchRemoteControl(options) {
         includeAuthToken: false
       }
     );
+    const remoteArgs = buildRemoteControlArgs(options.claudeArgs, selection.modelAliases, options, env);
     console.log(formatCommand(claudeCommand, remoteArgs));
     printRemoteEnvSummary(env, options);
     return;
@@ -825,12 +829,6 @@ async function launchRemoteControl(options) {
     wrapperModelIds,
     selectedModelExplicit
   } = await resolveLaunchModelSelection(options, apiKey);
-  const remoteArgs = buildRemoteControlArgs(options.claudeArgs, modelAliases, options, {
-    selectedModel,
-    selectedModelExplicit,
-    modelAliasMap
-  });
-
   if (!options.claude && !await findExecutable('claude')) {
     throw new Error('Could not find Claude Code on PATH. Install Claude Code or pass --claude <path>.');
   }
@@ -848,12 +846,7 @@ async function launchRemoteControl(options) {
   });
 
   const baseUrl = `http://${gateway.host}:${gateway.port}`;
-  const env = {
-    ...process.env
-  };
-  delete env.ANTHROPIC_API_KEY;
-  delete env.ANTHROPIC_AUTH_TOKEN;
-  Object.assign(env, buildClaudeEnv(
+  const remoteEnv = buildClaudeEnv(
     baseUrl,
     selectedModel,
     modelAliasMap,
@@ -862,7 +855,14 @@ async function launchRemoteControl(options) {
     {
       includeAuthToken: false
     }
-  ));
+  );
+  const remoteArgs = buildRemoteControlArgs(options.claudeArgs, modelAliases, options, remoteEnv);
+  const env = {
+    ...process.env
+  };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  Object.assign(env, remoteEnv);
 
   console.error(`command-cc: starting Claude Code Remote Control through ${baseUrl}`);
   console.error(`command-cc: requested model ${selectedModel}`);
@@ -1079,7 +1079,7 @@ async function writeClaudeCodeSettingsEnv(env, selection) {
   }
 
   let removedModel;
-  if (typeof settings.model === 'string' && (settings.model === 'default' || isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap))) {
+  if (typeof settings.model === 'string' && (COMMAND_CC_CLAUDE_SLOT_MODEL_SETTINGS.has(settings.model) || isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap))) {
     removedModel = settings.model;
     delete settings.model;
     changed = true;
@@ -1694,20 +1694,26 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-function buildClaudeArgs(claudeArgs, modelAliases, options) {
-  if (!options.restrictModelPicker || modelAliases.length === 0) {
-    return claudeArgs;
+function buildClaudeArgs(claudeArgs, modelAliases, options, settingsEnv) {
+  const settings = {};
+
+  if (options.restrictModelPicker && modelAliases.length > 0) {
+    settings.availableModels = modelAliases;
   }
 
-  const settings = {
-    availableModels: modelAliases
-  };
+  if (settingsEnv && Object.keys(settingsEnv).length > 0) {
+    settings.env = settingsEnv;
+  }
+
+  if (Object.keys(settings).length === 0) {
+    return claudeArgs;
+  }
 
   return ['--settings', JSON.stringify(settings), ...claudeArgs];
 }
 
-function buildRemoteControlArgs(claudeArgs, modelAliases, options, selection = {}) {
-  return buildClaudeArgs(['remote-control', ...claudeArgs], modelAliases, options, selection);
+function buildRemoteControlArgs(claudeArgs, modelAliases, options, settingsEnv) {
+  return buildClaudeArgs(['remote-control', ...claudeArgs], modelAliases, options, settingsEnv);
 }
 
 async function readCommandCodeAuth() {
