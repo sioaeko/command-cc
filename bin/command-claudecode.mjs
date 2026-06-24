@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.9';
+const VERSION = '0.8.10';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -25,7 +25,7 @@ const CONFIG_PATH = join(homedir(), '.command-claudecode', 'config.json');
 const CLAUDE_CODE_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
 const CLAUDE_CODE_BACKUP_DIR = join(homedir(), '.claude', 'backups');
 const CLAUDE_CODE_GATEWAY_MODELS_CACHE_PATH = join(homedir(), '.claude', 'cache', 'gateway-models.json');
-const COMMAND_CODE_CLI_VERSION = '0.37.2';
+const COMMAND_CODE_CLI_VERSION = '0.40.4';
 const GO_PLAN_MODEL_IDS = new Set([
   'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',
@@ -725,6 +725,7 @@ async function launchClaude(options) {
   if (!apiKey) {
     throw new Error('Missing Command Code API key. Run "command-cc setup", set COMMAND_CODE_API_KEY, or pass --api-key.');
   }
+  await assertCommandCodeAppAuth(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey, apiKeyInfo.source);
 
   const {
     account,
@@ -817,6 +818,7 @@ async function launchRemoteControl(options) {
   if (!apiKey) {
     throw new Error('Missing Command Code API key. Run "command-cc login" first, then run "command-cc remote".');
   }
+  await assertCommandCodeAppAuth(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey, apiKeyInfo.source);
 
   const {
     account,
@@ -895,6 +897,7 @@ async function serveOnly(options) {
   if (!apiKey) {
     throw new Error('Missing Command Code API key. Run "command-cc setup", set COMMAND_CODE_API_KEY, or pass --api-key.');
   }
+  await assertCommandCodeAppAuth(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey, 'configured API key');
 
   const {
     discoveryModelIds,
@@ -988,6 +991,7 @@ async function resolveGuiGatewayContext(options) {
   if (!apiKey) {
     throw new Error('Missing Command Code API key. Run "command-cc login" first, then run "command-cc gui".');
   }
+  await assertCommandCodeAppAuth(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey, apiKeyInfo.source);
 
   const selection = await resolveLaunchModelSelection(options, apiKey);
   const baseUrl = `http://${options.host}:${options.port}`;
@@ -1280,6 +1284,13 @@ async function doctor(options) {
   }
 
   try {
+    await assertCommandCodeAppAuth(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey, apiKeyInfo.source);
+    console.log('app API auth: ok');
+  } catch (error) {
+    console.log(`app API auth: failed (${error.message})`);
+  }
+
+  try {
     const models = await fetchModels(options.providerBase, apiKey);
     const account = await fetchAccountSummary(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey);
     const modelIds = modelIdsFromPayload(models);
@@ -1515,6 +1526,29 @@ function isWrapperSavedModel(modelId, wrapperModelIds, modelAliasMap) {
 async function resolveApiKey(options) {
   const info = await resolveApiKeyInfo(options);
   return info.apiKey;
+}
+
+async function assertCommandCodeAppAuth(apiBase, apiKey, source) {
+  try {
+    await fetchCommandCodeJson(apiBase, apiKey, '/alpha/whoami');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isCommandCodeAuthErrorMessage(message)) {
+      throw new Error([
+        `Command Code app API rejected the current login token from ${source}.`,
+        'Run "command-cc logout" and then "command-cc login" to refresh your Command Code login.',
+        'The provider model list can still work with this stale key, but generation will fail until the app API accepts it.',
+        `Original error: ${message}`
+      ].join(' '));
+    }
+
+    throw error;
+  }
+}
+
+function isCommandCodeAuthErrorMessage(message) {
+  return /(?:^|\s)401(?:\s|:)|invalid 'authorization' header|authentication failed|api key may be invalid|token/i
+    .test(message);
 }
 
 async function resolveApiKeyInfo(options) {

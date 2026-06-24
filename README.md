@@ -464,7 +464,7 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | Only two models show after adding `mimo-v2.5` | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. Stale gateway model cache is cleared before launch. |
 | A duplicate selected model appears as row 7 | `command-cc --dry-run` then restart | Make sure the wrapper is `0.6.17` or newer. It removes stale `~/.claude/settings.json` model values before launch. |
 | `claude-*` names show up in the first Go models | `command-cc --dry-run` then restart | Restart old sessions and make sure the wrapper is `0.6.17` or newer. |
-| `401 Invalid Authorization` | `command-cc login` then `command-cc doctor` | Refresh the official Command Code login. |
+| `API error` retry loop or `401 Invalid Authorization` | `command-cc doctor` | If `app API auth` fails, run `command-cc logout`, then `command-cc login`. The provider model list can still work with a stale key while `/alpha/generate` rejects it. |
 | `402 upgrade_required` from Provider API | `command-cc doctor` | Generation should use `/alpha/generate`; Provider API is only for model discovery. |
 | `MODEL_NOT_IN_PLAN` or plan access error | `command-cc models` | Pick one of the listed models or use `--all-models` to inspect the full catalog. |
 | `spawn EINVAL` | `command-cc -- --version` | Verify Claude Code can spawn through the wrapper. Update/restart old sessions. |
