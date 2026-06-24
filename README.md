@@ -33,7 +33,7 @@ command-cc doctor
 command-cc
 ```
 
-The default model is `deepseek-v4-flash`. The default picker is capped to seven visible Go-plan choices: `deepseek-v4-flash`, `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`.
+The default model is `deepseek-v4-flash`. The wrapper uses Claude Code's `enforceAvailableModels` setting so the `Default (recommended)` row also resolves to `deepseek-v4-flash` instead of your Claude account's native tier default. The default picker is capped to seven visible Go-plan choices: `deepseek-v4-flash`, `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`.
 
 Inside Claude Code:
 
@@ -206,7 +206,7 @@ Claude Code has one `Default` row plus five custom model slots. This wrapper poi
 
 | Mode | Command | `/model` behavior | Best for |
 | --- | --- | --- | --- |
-| Default | `command-cc` | Starts on `deepseek-v4-flash` and shows the six remaining priority Go-plan models: `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`. | Switching among the main Go-plan models inside Claude Code. |
+| Default | `command-cc` | Starts on `deepseek-v4-flash`, constrains the `Default` row to that first allowed model, and shows the six remaining priority Go-plan models: `glm-5.2`, `deepseek-v4-pro`, `mini-max-m3`, `qwen3.7-max`, `mimo-v2.5`, and `mimo-v2.5-pro`. | Switching among the main Go-plan models inside Claude Code. |
 | Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
 | Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
 | Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |

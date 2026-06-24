@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.4';
+const VERSION = '0.8.5';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -74,6 +74,10 @@ const COMMAND_CC_CLAUDE_ENV_KEYS = new Set([
   'ANTHROPIC_CUSTOM_MODEL_OPTION_NAME',
   'ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION',
   ...CLAUDE_MODEL_SLOT_KEYS
+]);
+const COMMAND_CC_CLAUDE_SETTINGS_KEYS = new Set([
+  'availableModels',
+  'enforceAvailableModels'
 ]);
 
 const HELP = `
@@ -702,9 +706,11 @@ async function launchClaude(options) {
   if (options.dryRun) {
     const selection = await resolveDryRunModelSelection(options, apiKey);
     const selectedModel = selection.selectedModel;
-    const claudeArgs = buildClaudeArgs(options.claudeArgs, selection.modelAliases, options);
+    const claudeArgs = buildClaudeArgs(options.claudeArgs, selection.modelAliases, options, selection);
     const port = options.port || 44003;
-    const env = buildClaudeEnv(`http://${options.host}:${port}`, selectedModel, selection.modelAliasMap, options, selection.slotModelIds);
+    const env = buildClaudeEnv(`http://${options.host}:${port}`, selectedModel, selection.modelAliasMap, options, selection.slotModelIds, {
+      useDefaultSelection: !selection.selectedModelExplicit
+    });
     console.log(formatCommand(claudeCommand, claudeArgs));
     printEnvSummary(env, options);
     return;
@@ -723,9 +729,14 @@ async function launchClaude(options) {
     slotModelIds,
     discoveryModelIds,
     discoveryModelAliases,
-    wrapperModelIds
+    wrapperModelIds,
+    selectedModelExplicit
   } = await resolveLaunchModelSelection(options, apiKey);
-  const claudeArgs = buildClaudeArgs(options.claudeArgs, modelAliases, options);
+  const claudeArgs = buildClaudeArgs(options.claudeArgs, modelAliases, options, {
+    selectedModel,
+    selectedModelExplicit,
+    modelAliasMap
+  });
 
   if (!options.claude && !await findExecutable('claude')) {
     throw new Error('Could not find Claude Code on PATH. Install Claude Code or pass --claude <path>.');
@@ -745,7 +756,9 @@ async function launchClaude(options) {
   const baseUrl = `http://${gateway.host}:${gateway.port}`;
   const env = {
     ...process.env,
-    ...buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options, slotModelIds)
+    ...buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options, slotModelIds, {
+      useDefaultSelection: !selectedModelExplicit
+    })
   };
 
   console.error(`command-cc: routing Claude Code through ${baseUrl}`);
@@ -785,14 +798,17 @@ async function launchRemoteControl(options) {
     const selectedModel = selection.selectedModel;
     const port = options.port || 44004;
     const baseUrl = `http://${options.host}:${port}`;
-    const remoteArgs = buildRemoteControlArgs(options.claudeArgs, selection.modelAliases, options);
+    const remoteArgs = buildRemoteControlArgs(options.claudeArgs, selection.modelAliases, options, selection);
     const env = buildClaudeEnv(
       baseUrl,
       selectedModel,
       selection.modelAliasMap,
       options,
       selection.slotModelIds,
-      { includeAuthToken: false }
+      {
+        includeAuthToken: false,
+        useDefaultSelection: !selection.selectedModelExplicit
+      }
     );
     console.log(formatCommand(claudeCommand, remoteArgs));
     printRemoteEnvSummary(env, options);
@@ -811,9 +827,14 @@ async function launchRemoteControl(options) {
     modelAliases,
     slotModelIds,
     discoveryModelIds,
-    wrapperModelIds
+    wrapperModelIds,
+    selectedModelExplicit
   } = await resolveLaunchModelSelection(options, apiKey);
-  const remoteArgs = buildRemoteControlArgs(options.claudeArgs, modelAliases, options);
+  const remoteArgs = buildRemoteControlArgs(options.claudeArgs, modelAliases, options, {
+    selectedModel,
+    selectedModelExplicit,
+    modelAliasMap
+  });
 
   if (!options.claude && !await findExecutable('claude')) {
     throw new Error('Could not find Claude Code on PATH. Install Claude Code or pass --claude <path>.');
@@ -843,7 +864,10 @@ async function launchRemoteControl(options) {
     modelAliasMap,
     options,
     slotModelIds,
-    { includeAuthToken: false }
+    {
+      includeAuthToken: false,
+      useDefaultSelection: !selectedModelExplicit
+    }
   ));
 
   console.error(`command-cc: starting Claude Code Remote Control through ${baseUrl}`);
@@ -978,7 +1002,10 @@ async function resolveGuiGatewayContext(options) {
     selection.selectedModel,
     selection.modelAliasMap,
     options,
-    selection.slotModelIds
+    selection.slotModelIds,
+    {
+      useDefaultSelection: !selection.selectedModelExplicit
+    }
   );
 
   return {
@@ -1045,6 +1072,13 @@ async function writeClaudeCodeSettingsEnv(env, selection) {
   const nextEnv = { ...existingEnv };
   let changed = settings.env !== existingEnv;
 
+  for (const key of COMMAND_CC_CLAUDE_ENV_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(env, key) && Object.prototype.hasOwnProperty.call(nextEnv, key)) {
+      delete nextEnv[key];
+      changed = true;
+    }
+  }
+
   for (const [key, value] of Object.entries(env)) {
     if (nextEnv[key] !== value) {
       nextEnv[key] = value;
@@ -1052,8 +1086,26 @@ async function writeClaudeCodeSettingsEnv(env, selection) {
     }
   }
 
+  const nextModel = selection.selectedModelExplicit
+    ? toCleanModelAlias(selection.selectedModel, selection.modelAliasMap)
+    : 'default';
+  if (settings.model !== nextModel) {
+    settings.model = nextModel;
+    changed = true;
+  }
+
+  if (!arraysEqual(settings.availableModels, selection.modelAliases)) {
+    settings.availableModels = selection.modelAliases;
+    changed = true;
+  }
+
+  if (settings.enforceAvailableModels !== true) {
+    settings.enforceAvailableModels = true;
+    changed = true;
+  }
+
   let removedModel;
-  if (typeof settings.model === 'string' && isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap)) {
+  if (typeof settings.model === 'string' && settings.model !== nextModel && isWrapperSavedModel(settings.model, selection.wrapperModelIds, selection.modelAliasMap)) {
     removedModel = settings.model;
     delete settings.model;
     changed = true;
@@ -1099,6 +1151,13 @@ async function uninstallGuiSettings(options) {
     }
   }
 
+  for (const key of COMMAND_CC_CLAUDE_SETTINGS_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(settings, key)) {
+      delete settings[key];
+      removed.push(key);
+    }
+  }
+
   if (options.dryRun) {
     console.log(`Would remove ${removed.length} command-cc env keys from ${CLAUDE_CODE_SETTINGS_PATH}`);
     for (const key of removed) {
@@ -1124,7 +1183,10 @@ async function printGuiStatus() {
   console.log(`settings: ${CLAUDE_CODE_SETTINGS_PATH}`);
   console.log(`configured: ${configuredKeys.length ? 'yes' : 'no'}`);
   console.log(`gateway: ${baseUrl || '(not set)'}`);
-  console.log(`model: ${env.ANTHROPIC_MODEL || '(not set)'}`);
+  console.log(`model: ${settings.model || env.ANTHROPIC_MODEL || '(not set)'}`);
+  if (Array.isArray(settings.availableModels)) {
+    console.log(`available models: ${settings.availableModels.join(', ')}`);
+  }
   console.log(`managed keys: ${configuredKeys.length}`);
   console.log('desktop login: required by Claude Desktop; command-cc cannot bypass the GUI app OAuth login');
   console.log('desktop plan: Claude Code Desktop requires Pro, Max, Team, Enterprise, or Console access; free Claude plans are blocked before gateway routing starts');
@@ -1344,21 +1406,27 @@ function buildClaudeEnv(baseUrl, selectedModel, modelAliasMap, options = {}, slo
   const slotAliases = Array.isArray(slotModelIds) && slotModelIds.length > 0
     ? slotModelIds.map((id) => toCleanModelAlias(id, modelAliasMap))
     : [selectedAlias];
+  const useDefaultSelection = envOptions.useDefaultSelection === true;
   const env = {
     ANTHROPIC_BASE_URL: baseUrl,
     CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
-    ANTHROPIC_MODEL: selectedAlias,
-    ANTHROPIC_CUSTOM_MODEL_OPTION_NAME: displayModelNameForAlias(slotAliases.at(-1) || selectedAlias, modelAliasMap),
-    ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION: 'Custom Command Code model'
   };
+
+  if (!useDefaultSelection) {
+    env.ANTHROPIC_MODEL = selectedAlias;
+    env.ANTHROPIC_CUSTOM_MODEL_OPTION_NAME = displayModelNameForAlias(slotAliases.at(-1) || selectedAlias, modelAliasMap);
+    env.ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION = 'Custom Command Code model';
+  }
 
   if (envOptions.includeAuthToken !== false) {
     env.ANTHROPIC_AUTH_TOKEN = 'command-code-local-gateway';
   }
 
-  CLAUDE_MODEL_SLOT_KEYS.forEach((key, index) => {
-    env[key] = slotAliases[index] || selectedAlias;
-  });
+  if (!useDefaultSelection) {
+    CLAUDE_MODEL_SLOT_KEYS.forEach((key, index) => {
+      env[key] = slotAliases[index] || selectedAlias;
+    });
+  }
 
   return env;
 }
@@ -1523,9 +1591,11 @@ async function resolveFirstProviderModel(providerBase, apiKey) {
 
 async function resolveDryRunModelSelection(options, apiKey) {
   if (!apiKey) {
-    const selectedModel = resolveSelectedModel(options) || '<first-model-from-command-code>';
+    const requestedModel = resolveSelectedModel(options);
+    const selectedModel = requestedModel || '<first-model-from-command-code>';
     return {
       selectedModel,
+      selectedModelExplicit: Boolean(requestedModel),
       modelAliasMap: undefined,
       slotModelIds: selectedModel.startsWith('<')
         ? []
@@ -1542,9 +1612,11 @@ async function resolveDryRunModelSelection(options, apiKey) {
     return await resolveLaunchModelSelection(options, apiKey);
   } catch (error) {
     console.error(`command-cc: dry-run model discovery failed (${error.message}); showing local fallback only`);
-    const selectedModel = resolveSelectedModel(options) || '<first-model-from-command-code>';
+    const requestedModel = resolveSelectedModel(options);
+    const selectedModel = requestedModel || '<first-model-from-command-code>';
     return {
       selectedModel,
+      selectedModelExplicit: Boolean(requestedModel),
       modelAliasMap: undefined,
       slotModelIds: selectedModel.startsWith('<')
         ? []
@@ -1563,8 +1635,10 @@ async function resolveLaunchModelSelection(options, apiKey) {
   const providerModelIds = modelIdsFromPayload(providerModels);
   const account = await fetchAccountSummary(commandCodeApiBaseFromProviderBase(options.providerBase), apiKey);
   const pickerModelIds = filterModelIdsForPlan(providerModelIds, account, options);
-  const selectedModel = resolveKnownModelId(resolveSelectedModel(options), providerModelIds)
+  const requestedModel = resolveSelectedModel(options);
+  const selectedModel = resolveKnownModelId(requestedModel, providerModelIds)
     || pickInitialProviderModel(pickerModelIds);
+  const selectedModelExplicit = Boolean(requestedModel);
 
   if (!selectedModel) {
     throw new Error('Command Code returned no models from /provider/v1/models.');
@@ -1590,6 +1664,7 @@ async function resolveLaunchModelSelection(options, apiKey) {
     account,
     pickerModelIds,
     selectedModel,
+    selectedModelExplicit,
     modelAliasMap,
     modelAliases,
     slotModelIds,
@@ -1644,20 +1719,33 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-function buildClaudeArgs(claudeArgs, modelAliases, options) {
+function arraysEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function buildClaudeArgs(claudeArgs, modelAliases, options, selection = {}) {
   if (!options.restrictModelPicker || modelAliases.length === 0) {
     return claudeArgs;
   }
 
   const settings = {
-    availableModels: modelAliases
+    availableModels: modelAliases,
+    enforceAvailableModels: true
   };
+
+  settings.model = selection.selectedModelExplicit
+    ? toCleanModelAlias(selection.selectedModel, selection.modelAliasMap)
+    : 'default';
 
   return ['--settings', JSON.stringify(settings), ...claudeArgs];
 }
 
-function buildRemoteControlArgs(claudeArgs, modelAliases, options) {
-  return buildClaudeArgs(['remote-control', ...claudeArgs], modelAliases, options);
+function buildRemoteControlArgs(claudeArgs, modelAliases, options, selection = {}) {
+  return buildClaudeArgs(['remote-control', ...claudeArgs], modelAliases, options, selection);
 }
 
 async function readCommandCodeAuth() {
