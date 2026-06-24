@@ -204,7 +204,7 @@ Claude Code has one `Default` row plus five custom model slots. This wrapper poi
 
 | Mode | Command | `/model` behavior | Best for |
 | --- | --- | --- | --- |
-| Default | `command-cc` | Shows the Go-plan models as clean aliases like `glm-5.2`, `mimo-v2.5-pro`, `deepseek-v4-pro`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
+| Default | `command-cc` | Shows the Go-plan models as clean aliases like `glm-5.2`, `mimo-v2.5-pro`, `deepseek-v4-pro`, `deepseek-v4-flash`, and `nemotron-3-ultra-550b-a55b`. | Switching among Go-plan models inside Claude Code. |
 | Clean single-model | `command-cc --clean-model-name` | Uses prefix-free env ids like `mimo-v2.5-pro`; Claude Code may only show the selected model. | Deepclaude-style clean display for one model. |
 | Full catalog | `command-cc --all-models` | Disables plan-aware filtering. | Checking everything Command Code exposes. |
 | Built-in models allowed | `command-cc --allow-claude-model-list` | Does not restrict Claude Code's own picker list. | Debugging or comparing with native Claude models. |
@@ -215,6 +215,7 @@ Default Go-plan picker aliases currently look like:
 | --- | --- |
 | `zai-org/GLM-5.2` | `glm-5.2` |
 | `deepseek/deepseek-v4-pro` | `deepseek-v4-pro` |
+| `deepseek/deepseek-v4-flash` | `deepseek-v4-flash` |
 | `nvidia/nemotron-3-ultra-550b-a55b` | `nemotron-3-ultra-550b-a55b` |
 | `Qwen/Qwen3.7-Max` | `qwen3.7-max` |
 | `MiniMaxAI/MiniMax-M3` | `mini-max-m3` |
@@ -305,6 +306,7 @@ By default, the picker is filtered to the Go-friendly models known to this wrapp
 
 ```text
 deepseek/deepseek-v4-pro
+deepseek/deepseek-v4-flash
 zai-org/GLM-5.2
 nvidia/nemotron-3-ultra-550b-a55b
 Qwen/Qwen3.7-Max

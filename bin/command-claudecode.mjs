@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.1';
+const VERSION = '0.8.2';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -29,6 +29,7 @@ const COMMAND_CODE_CLI_VERSION = '0.37.2';
 const GO_PLAN_MODEL_IDS = new Set([
   'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',
+  'deepseek/deepseek-v4-flash',
   'nvidia/nemotron-3-ultra-550b-a55b',
   'Qwen/Qwen3.7-Max',
   'MiniMaxAI/MiniMax-M3',
@@ -38,6 +39,7 @@ const GO_PLAN_MODEL_IDS = new Set([
 const GO_PLAN_SLOT_PRIORITY = [
   'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',
+  'deepseek/deepseek-v4-flash',
   'MiniMaxAI/MiniMax-M3',
   'Qwen/Qwen3.7-Max',
   'xiaomi/mimo-v2.5',
