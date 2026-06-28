@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';

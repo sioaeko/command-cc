@@ -1,8 +1,8 @@
 {
   "name": "command-cc",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": false,
-  "description": "Local wrappers that route your installed Claude Code CLI to Command Code Go-plan models or Kiro Gateway.",
+  "description": "Local wrapper that routes your installed Claude Code CLI to Command Code Go-plan models.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -17,8 +17,7 @@
     "command-claudecode": "./bin/command-claudecode.mjs",
     "claude-command-code": "./bin/command-claudecode.mjs",
     "cmdclaude": "./bin/command-claudecode.mjs",
-    "ccclaude": "./bin/command-claudecode.mjs",
-    "kiro-cc": "./bin/kiro-cc.mjs"
+    "ccclaude": "./bin/command-claudecode.mjs"
   },
   "files": [
     "bin",
@@ -29,8 +28,6 @@
     "setup": "node ./bin/command-claudecode.mjs setup",
     "models": "node ./bin/command-claudecode.mjs models",
     "doctor": "node ./bin/command-claudecode.mjs doctor",
-    "kiro:models": "node ./bin/kiro-cc.mjs models",
-    "kiro:doctor": "node ./bin/kiro-cc.mjs doctor",
     "help": "node ./bin/command-claudecode.mjs --help",
     "pack:check": "npm pack --dry-run"
   },
