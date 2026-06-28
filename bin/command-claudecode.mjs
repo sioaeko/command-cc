@@ -10,7 +10,7 @@ import { arch, homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import process from 'node:process';
 
-const VERSION = '0.8.10';
+const VERSION = '0.9.0';
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GUI_PORT = 64726;
 const DEFAULT_API_BASE = 'https://api.commandcode.ai';
@@ -25,7 +25,7 @@ const CONFIG_PATH = join(homedir(), '.command-claudecode', 'config.json');
 const CLAUDE_CODE_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
 const CLAUDE_CODE_BACKUP_DIR = join(homedir(), '.claude', 'backups');
 const CLAUDE_CODE_GATEWAY_MODELS_CACHE_PATH = join(homedir(), '.claude', 'cache', 'gateway-models.json');
-const COMMAND_CODE_CLI_VERSION = '0.40.4';
+const COMMAND_CODE_CLI_VERSION = '0.40.5';
 const GO_PLAN_MODEL_IDS = new Set([
   'zai-org/GLM-5.2',
   'deepseek/deepseek-v4-pro',

@@ -3,9 +3,10 @@
 [![Node.js >=20](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org/)
 [![Claude Code gateway](https://img.shields.io/badge/Claude%20Code-local%20gateway-111827)](#how-it-works)
 [![Command Code](https://img.shields.io/badge/Command%20Code-app%20API-2563eb)](https://commandcode.ai/)
+[![Kiro Gateway](https://img.shields.io/badge/Kiro-Gateway-7c3aed)](#kiro-gateway-wrapper)
 [![Windows tested](https://img.shields.io/badge/Windows-tested-0078d4)](#development)
 
-Run your own Claude Code installation from any folder while routing model calls through your logged-in Command Code account.
+Run your own Claude Code installation from any folder while routing model calls through your logged-in Command Code account, or through a separately installed Kiro Gateway.
 
 ![command-cc model picker inside Claude Code](assets/command-cc.png)
 
@@ -13,7 +14,11 @@ Run your own Claude Code installation from any folder while routing model calls 
 
 `command-cc` does not bundle, redistribute, include, fork, patch, or modify Claude Code. It is only a local wrapper and gateway that launches the Claude Code CLI already installed on your machine.
 
+`kiro-cc` follows the same rule. It does not bundle, redistribute, include, fork, patch, or modify Kiro, Claude Code, or Kiro Gateway. It only installs/runs [Jwadow/kiro-gateway](https://github.com/Jwadow/kiro-gateway) as a separate local checkout and points your installed Claude Code CLI at that local Anthropic-compatible endpoint.
+
 The wrapper exists to let a logged-in Command Code Go plan use Command Code models from inside Claude Code. It is not an official Anthropic, Claude Code, or Command Code distribution, and it is not affiliated with or endorsed by those services.
+
+The Kiro wrapper exists to let your logged-in Kiro CLI account be used through Kiro Gateway from inside Claude Code. It is not an official AWS, Kiro, Anthropic, Claude Code, or Kiro Gateway distribution, and it is not affiliated with or endorsed by those services.
 
 ```text
 Claude Code
@@ -22,7 +27,14 @@ Claude Code
         -> Command Code app generation API
 ```
 
-`command-cc` is a global CLI wrapper. Install it once, then run it inside any repository just like `claude`.
+```text
+Claude Code
+    -> local Anthropic-compatible Kiro Gateway
+        -> Kiro CLI account credentials
+        -> Kiro model API
+```
+
+`command-cc` and `kiro-cc` are global CLI wrappers. Install once, then run either inside any repository just like `claude`.
 
 ## Quick Start
 
@@ -63,6 +75,46 @@ For a one-shot prompt:
 command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 ```
 
+### Kiro Gateway Quick Start
+
+`kiro-cc` is separate from `command-cc`. It uses your Kiro CLI login and an external Kiro Gateway checkout under `~/.command-claudecode/kiro-gateway`.
+
+Requirements:
+
+```powershell
+# Kiro CLI must already be installed and logged in
+kiro-cli login
+
+# Python 3.10+ and git must be available
+python --version
+git --version
+```
+
+Install/update the local Kiro Gateway checkout, then launch Claude Code through it:
+
+```powershell
+kiro-cc setup
+kiro-cc doctor
+kiro-cc models
+kiro-cc --model auto
+```
+
+Pick a specific Kiro model:
+
+```powershell
+kiro-cc --model claude-sonnet-4.6
+kiro-cc --model deepseek-3.2
+kiro-cc --model qwen3-coder-next
+```
+
+Start the local Kiro adapter plus its upstream Kiro Gateway:
+
+```powershell
+kiro-cc serve --port 8000
+```
+
+`kiro-cc` stores only wrapper config in `~/.command-claudecode/kiro-cc.json`. Kiro credentials remain in the Kiro CLI database; the generated local proxy key stays in the external gateway `.env` file.
+
 ## What You Get
 
 | Feature | What it does |
@@ -70,7 +122,9 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | Global launcher | Run `command-cc` from any project, using your existing Claude Code install. |
 | GUI bridge | Configure Claude Code Desktop / GUI local sessions and run a fixed-port local gateway. |
 | Remote Control bridge | Start `claude remote-control` with model requests routed through Command Code. |
+| Kiro bridge | `kiro-cc` launches Claude Code through a separately installed Kiro Gateway. |
 | Command Code login reuse | Reads the official Command Code login from `~/.commandcode/auth.json`. |
+| Kiro CLI login reuse | Reads Kiro Gateway credentials from the Kiro CLI SQLite database path. |
 | Local gateway | Presents an Anthropic-compatible API to Claude Code on `127.0.0.1`. |
 | Go-plan filtering | Shows the Go-friendly Command Code models when the logged-in account is on Go. |
 | Model aliases | Maps clean ids like `mimo-v2.5-pro` back to real ids like `xiaomi/mimo-v2.5-pro`. |
@@ -104,6 +158,20 @@ command-cc --model xiaomi/mimo-v2.5-pro -- -p "explain this repo"
 | `command-cc config get` | Show saved wrapper config. |
 | `command-cc config path` | Print the config path. |
 
+Kiro commands:
+
+| Command | Purpose |
+| --- | --- |
+| `kiro-cc` | Launch Claude Code through a local Kiro Gateway. |
+| `kiro-cc setup` | Clone/update Kiro Gateway, create a Python venv, install requirements, and write `.env`. |
+| `kiro-cc login` | Run the installed Kiro CLI login flow. |
+| `kiro-cc whoami` | Run Kiro CLI identity check. |
+| `kiro-cc models` | List models visible to Kiro CLI without spending generation tokens. |
+| `kiro-cc models --json` | Print Kiro CLI model list as JSON. |
+| `kiro-cc serve --port 8000` | Start the local Kiro adapter plus its upstream Kiro Gateway. |
+| `kiro-cc doctor` | Check Python, git, Kiro CLI, Claude Code, and gateway setup. |
+| `kiro-cc --dry-run --model auto` | Print the Claude Code env/settings without starting the gateway. |
+
 Installed aliases:
 
 ```powershell
@@ -112,6 +180,7 @@ command-claudecode
 claude-command-code
 cmdclaude
 ccclaude
+kiro-cc
 ```
 
 ## Installation
@@ -201,6 +270,64 @@ Environment variables still override saved preferences:
 $env:COMMAND_CODE_MODEL = "xiaomi/mimo-v2.5-pro"
 $env:COMMAND_CODE_API_KEY = "<command-code-api-key>"
 ```
+
+## Kiro Gateway Wrapper
+
+`kiro-cc` is an orchestrator around [Jwadow/kiro-gateway](https://github.com/Jwadow/kiro-gateway). The upstream gateway provides OpenAI-compatible `/v1/chat/completions` and Anthropic-compatible `/v1/messages`; this package starts it, places a tiny Node adapter in front of it for Claude Code request compatibility, and launches Claude Code with the right local env.
+
+Install/update the external gateway:
+
+```powershell
+kiro-cc setup
+```
+
+What `setup` does:
+
+| Item | Path / source |
+| --- | --- |
+| Gateway checkout | `~/.command-claudecode/kiro-gateway` |
+| Python venv | `~/.command-claudecode/kiro-gateway/.venv` |
+| Gateway env | `~/.command-claudecode/kiro-gateway/.env` |
+| Kiro CLI SQLite auth | Windows default: `%LOCALAPPDATA%\Kiro-Cli\data.sqlite3` |
+| Wrapper config | `~/.command-claudecode/kiro-cc.json` |
+
+The external gateway's own license and terms apply to that checkout. This repo does not vendor the gateway source.
+
+Model discovery uses Kiro CLI and does not spend generation tokens:
+
+```powershell
+kiro-cc models
+kiro-cc models --json
+```
+
+Known model ids currently returned by the local Kiro CLI include:
+
+```text
+auto
+claude-opus-4.8
+claude-opus-4.7
+claude-opus-4.6
+claude-sonnet-4.6
+claude-haiku-4.5
+deepseek-3.2
+minimax-m2.5
+glm-5
+qwen3-coder-next
+```
+
+Run without spending tokens to verify the Claude Code env:
+
+```powershell
+kiro-cc --dry-run --model claude-sonnet-4.6
+```
+
+Then launch:
+
+```powershell
+kiro-cc --model claude-sonnet-4.6
+```
+
+Claude Code's `/model` UI still has its normal custom-slot limits. `kiro-cc` passes Kiro model ids as clean model names and also enables gateway model discovery, but Claude Code may not render every Kiro model as a visible picker row at once. Direct `--model <id>` remains the reliable path.
 
 ## Model Picker Modes
 
@@ -455,6 +582,22 @@ Command Code
 
 The real Command Code API key stays in the local gateway process. Claude Code receives a local placeholder auth token, not your Command Code key.
 
+For Kiro:
+
+```text
+Claude Code
+  reads ANTHROPIC_BASE_URL=http://127.0.0.1:<port>
+  sends /v1/models and /v1/messages
+
+kiro-cc
+  starts the external Kiro Gateway checkout
+  passes the generated local PROXY_API_KEY to Claude Code
+
+Kiro Gateway
+  reads Kiro CLI auth from the configured SQLite database
+  adapts Anthropic-compatible requests to Kiro's model API
+```
+
 ## Troubleshooting
 
 | Symptom | What to run | Likely fix |
@@ -474,6 +617,10 @@ The real Command Code API key stays in the local gateway process. Claude Code re
 | GUI says your account is on the Free plan | Use terminal `command-cc`, or use a Claude account with Code access | Claude Code Desktop blocks Free-plan accounts before gateway routing can start. |
 | GUI session ignores the gateway | `command-cc gui status` | Use a Local session, restart the GUI after setup, and keep `command-cc gui` or `command-cc gui serve` running. |
 | Remote Control fails before showing a URL | `claude doctor`, then `command-cc remote --dry-run` | Remote Control eligibility/OAuth is checked by Anthropic before model routing starts. |
+| `kiro-cc setup` cannot create venv | `kiro-cc doctor` | Install Python 3.10+ and git, then rerun `kiro-cc setup`. |
+| `kiro-cc models` fails | `kiro-cc login` | Kiro CLI is missing, not logged in, or the Kiro CLI database is unavailable. |
+| Kiro Gateway starts but Claude Code gets 401 | `kiro-cc setup` | Regenerate the gateway `.env`/proxy key, then relaunch `kiro-cc`. |
+| Kiro model is not visible in `/model` | `kiro-cc --model <id>` | Claude Code custom picker rows are limited; direct model launch is the reliable path. |
 
 ## Development
 
@@ -489,6 +636,9 @@ command-cc gui --dry-run
 command-cc gui status
 command-cc remote --dry-run
 command-cc -- --version
+kiro-cc doctor
+kiro-cc models
+kiro-cc --dry-run --model auto
 npm pack --dry-run
 ```
 
@@ -507,8 +657,10 @@ Invoke-RestMethod http://127.0.0.1:48146/v1/models
 ## Notes
 
 - Node.js 20 or newer is required.
+- `kiro-cc` additionally needs Python 3.10+ and git to install/update the external Kiro Gateway checkout.
 - The wrapper is intentionally local-first: no background daemon is installed.
 - Claude Code is required separately. This package does not ship Claude Code or any modified Claude Code files.
+- Kiro and Kiro Gateway are required separately for `kiro-cc`; this package does not ship Kiro or vendored Kiro Gateway source.
 - Image inputs are currently represented as text placeholders when adapting to Command Code's app API.
 - The package is distributed without an open-source license unless a license file is added later.
 - The repository is packaged with only `bin/`, `assets/`, `README.md`, and `package.json`.
